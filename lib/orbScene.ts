@@ -17,6 +17,7 @@ export interface OrbSceneApi {
   setMicActive(active: boolean): Promise<boolean>;
   updateMouse(x: number, y: number): void;
   setMinimized(minimized: boolean): void;
+  setHologramMode(mode: "jarvis" | "ultron"): void;
 }
 
 const HOME_POSITION = new THREE.Vector3(0, 0.5, 5.5);
@@ -147,20 +148,44 @@ export function createOrbScene(container: HTMLElement): OrbSceneApi {
   composer.addPass(chromaticPass);
 
   // Controls
-  const controls = new OrbitControls(camera, renderer.domElement);
-  controls.enableDamping = true;
-  controls.dampingFactor = 0.04;
-  controls.minDistance = MIN_DISTANCE;
-  controls.maxDistance = MAX_DISTANCE;
-  controls.zoomSpeed = 1.4;
-  controls.enablePan = false;
+  const newControls = new OrbitControls(camera, renderer.domElement);
+  newControls.enableDamping = true;
+  newControls.dampingFactor = 0.04;
+  newControls.minDistance = MIN_DISTANCE;
+  newControls.maxDistance = MAX_DISTANCE;
+  newControls.zoomSpeed = 1.4;
+  newControls.enablePan = false;
 
-  // ——— COLORS ———
-  const C_BRIGHT = 0xffaa00; // Vibrant Golden Orange
-  const C_MID = 0xff7700;    // Rich Warm Amber
-  const C_DIM = 0xcc4400;    // Deep Amber
-  const C_FAINT = 0x551100;  // Faint Crimson
-  const C_HOT = 0xffeed0;    // Warm Gold / Hot Core
+  const controls = newControls;
+
+  let lastCameraActionTime = 0;
+  controls.addEventListener("start", () => {
+    lastCameraActionTime = performance.now();
+  });
+  controls.addEventListener("change", () => {
+    if ((controls as any).state !== -1) {
+      lastCameraActionTime = performance.now();
+    }
+  });
+
+  // ——— COLORS (Jarvis vs. Ultron Mode) ———
+  const J_BRIGHT = new THREE.Color(0xffaa00);
+  const J_MID = new THREE.Color(0xff7700);
+  const J_DIM = new THREE.Color(0xcc4400);
+  const J_FAINT = new THREE.Color(0x551100);
+  const J_HOT = new THREE.Color(0xffeed0);
+
+  const U_BRIGHT = new THREE.Color(0x00d2ff); // Neon Cyan
+  const U_MID = new THREE.Color(0x0066ff);    // Neon Blue
+  const U_DIM = new THREE.Color(0x0033aa);    // Deep Cobalt
+  const U_FAINT = new THREE.Color(0x001144);  // Faint Navy
+  const U_HOT = new THREE.Color(0xe0f7ff);    // Electric White/Cyan Core
+
+  const C_BRIGHT = J_BRIGHT.clone();
+  const C_MID = J_MID.clone();
+  const C_DIM = J_DIM.clone();
+  const C_FAINT = J_FAINT.clone();
+  const C_HOT = J_HOT.clone();
 
   // ——— ORB ROOT ———
   // Every part of the orb (shells, core, orbiting debris, text, dust, rings)
@@ -169,7 +194,7 @@ export function createOrbScene(container: HTMLElement): OrbSceneApi {
   scene.add(orbGroup);
 
   // ——— MATERIAL HELPERS ———
-  function lineMat(color: number, opacity = 1) {
+  function lineMat(color: THREE.Color | number, opacity = 1) {
     return new THREE.LineBasicMaterial({
       color,
       transparent: true,
@@ -263,6 +288,62 @@ export function createOrbScene(container: HTMLElement): OrbSceneApi {
     line.userData = { isThickBand: true };
     outerShell.add(line);
   }
+
+  // Outer particle shell - dense holographic green and gold data dots (matching user's reference image)
+  const outerParticleCount = 4000;
+  const outerParticlePos = new Float32Array(outerParticleCount * 3);
+  const outerParticleColors = new Float32Array(outerParticleCount * 3);
+
+  const cGreen = new THREE.Color(0x00ff66);
+  const cGold = new THREE.Color(0xffaa00);
+
+  for (let i = 0; i < outerParticleCount; i++) {
+    const theta = Math.random() * Math.PI * 2;
+    const phi = Math.acos(2 * Math.random() - 1);
+    // Position exactly on the outer sphere surface (radius R1 = 2.0) with slight noise
+    const r = R1 + (Math.random() - 0.5) * 0.05;
+    
+    outerParticlePos[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+    outerParticlePos[i * 3 + 1] = r * Math.cos(phi);
+    outerParticlePos[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
+
+    // Color combo: 85% holographic green, 15% gold
+    const isGold = Math.random() > 0.85;
+    const col = isGold ? cGold : cGreen;
+    outerParticleColors[i * 3] = col.r;
+    outerParticleColors[i * 3 + 1] = col.g;
+    outerParticleColors[i * 3 + 2] = col.b;
+  }
+
+  const outerParticleGeo = new THREE.BufferGeometry();
+  outerParticleGeo.setAttribute("position", new THREE.Float32BufferAttribute(outerParticlePos, 3));
+  outerParticleGeo.setAttribute("color", new THREE.Float32BufferAttribute(outerParticleColors, 3));
+
+  // Soft dot canvas for outer particles
+  const greenDotC = document.createElement("canvas");
+  greenDotC.width = greenDotC.height = 32;
+  const gdCtx = greenDotC.getContext("2d")!;
+  const gdG = gdCtx.createRadialGradient(16, 16, 0, 16, 16, 16);
+  gdG.addColorStop(0, "rgba(255, 255, 255, 1)");
+  gdG.addColorStop(0.35, "rgba(0, 255, 102, 0.95)");
+  gdG.addColorStop(0.65, "rgba(0, 150, 60, 0.25)");
+  gdG.addColorStop(1, "rgba(0, 0, 0, 0)");
+  gdCtx.fillStyle = gdG;
+  gdCtx.fillRect(0, 0, 32, 32);
+
+  const outerParticleMat = new THREE.PointsMaterial({
+    map: new THREE.CanvasTexture(greenDotC),
+    size: 0.038,
+    transparent: true,
+    opacity: 0.85,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    sizeAttenuation: true,
+    vertexColors: true,
+  });
+
+  const outerParticlePoints = new THREE.Points(outerParticleGeo, outerParticleMat);
+  outerShell.add(outerParticlePoints);
 
   orbGroup.add(outerShell);
 
@@ -447,25 +528,66 @@ export function createOrbScene(container: HTMLElement): OrbSceneApi {
   const icoWire = new THREE.LineSegments(icoEdges, icoWireMat);
   orbGroup.add(icoWire);
 
-  // Glowing center sphere — dense, high intensity
+  // Glowing center sphere — dense, high intensity but small (tiny spark) to prevent bulging
   const coreSphereMat = new THREE.MeshBasicMaterial({
     color: C_HOT,
     transparent: true,
-    opacity: 0.75,
+    opacity: 0.65,
     blending: THREE.AdditiveBlending,
   });
-  const coreSphere = new THREE.Mesh(new THREE.SphereGeometry(0.28, 16, 16), coreSphereMat);
+  const coreSphere = new THREE.Mesh(new THREE.SphereGeometry(0.06, 16, 16), coreSphereMat);
   orbGroup.add(coreSphere);
 
-  // Larger faint glow — more prominent golden halo
+  // Larger faint glow — subtle golden halo (opacity reduced to keep inner spiral visible)
   const glowSphereMat = new THREE.MeshBasicMaterial({
     color: C_MID,
     transparent: true,
-    opacity: 0.18,
+    opacity: 0.06,
     blending: THREE.AdditiveBlending,
   });
-  const glowSphere = new THREE.Mesh(new THREE.SphereGeometry(0.8, 16, 16), glowSphereMat);
+  const glowSphere = new THREE.Mesh(new THREE.SphereGeometry(0.5, 16, 16), glowSphereMat);
   orbGroup.add(glowSphere);
+
+  // Neural network connections for Ultron mode
+  const neuralCount = 75;
+  const neuralGeo = new THREE.BufferGeometry();
+  const neuralPos: number[] = [];
+  const neuralNodes: THREE.Vector3[] = [];
+
+  // Generate 75 neural center nodes
+  for (let i = 0; i < neuralCount; i++) {
+    const r = 0.4 + Math.pow(Math.random(), 1.5) * 1.4;
+    const theta = Math.random() * Math.PI * 2;
+    const phi = Math.acos(2 * Math.random() - 1);
+    neuralNodes.push(new THREE.Vector3(
+      r * Math.sin(phi) * Math.cos(theta),
+      r * Math.cos(phi),
+      r * Math.sin(phi) * Math.sin(theta)
+    ));
+  }
+
+  // Connect close nodes to form a synaptic network
+  for (let i = 0; i < neuralNodes.length; i++) {
+    for (let j = i + 1; j < neuralNodes.length; j++) {
+      const d = neuralNodes[i].distanceTo(neuralNodes[j]);
+      if (d < 0.65) {
+        neuralPos.push(neuralNodes[i].x, neuralNodes[i].y, neuralNodes[i].z);
+        neuralPos.push(neuralNodes[j].x, neuralNodes[j].y, neuralNodes[j].z);
+      }
+    }
+  }
+
+  neuralGeo.setAttribute("position", new THREE.Float32BufferAttribute(neuralPos, 3));
+  const neuralOrig = new Float32Array(neuralPos);
+  const neuralMat = new THREE.LineBasicMaterial({
+    color: 0x00d2ff,
+    transparent: true,
+    opacity: 0.0, // starts fully hidden (Jarvis mode)
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  const neuralWeb = new THREE.LineSegments(neuralGeo, neuralMat);
+  orbGroup.add(neuralWeb);
 
   // ═══════════════════════════════════════════════
   // CODE TEXT — tiny, dense, scattered
@@ -771,7 +893,18 @@ export function createOrbScene(container: HTMLElement): OrbSceneApi {
   const sphericalScratch = new THREE.Spherical();
   const offsetScratch = new THREE.Vector3();
 
+  const jarvisView = {
+    cameraPos: new THREE.Vector3().copy(HOME_POSITION),
+    target: new THREE.Vector3(0, 0, 0),
+  };
+  const ultronView = {
+    cameraPos: new THREE.Vector3().copy(HOME_POSITION),
+    target: new THREE.Vector3(0, 0, 0),
+  };
+  let lastHologramMode = 0;
+
   function rotateBy(deltaTheta: number, deltaPhi: number) {
+    lastCameraActionTime = performance.now();
     offsetScratch.copy(camera.position).sub(controls.target);
     sphericalScratch.setFromVector3(offsetScratch);
     sphericalScratch.theta -= deltaTheta;
@@ -787,6 +920,7 @@ export function createOrbScene(container: HTMLElement): OrbSceneApi {
   }
 
   function zoomBy(factor: number) {
+    lastCameraActionTime = performance.now();
     offsetScratch.copy(camera.position).sub(controls.target);
     const maxD = isMinimized ? 22.0 : 7.5;
     const dist = THREE.MathUtils.clamp(
@@ -799,6 +933,10 @@ export function createOrbScene(container: HTMLElement): OrbSceneApi {
   }
 
   function resetView() {
+    const activeView = targetHologramMode === 0 ? jarvisView : ultronView;
+    activeView.cameraPos.copy(HOME_POSITION);
+    activeView.target.set(0, 0, 0);
+
     camera.position.copy(HOME_POSITION);
     controls.target.set(0, 0, 0);
     camera.lookAt(controls.target);
@@ -815,11 +953,41 @@ export function createOrbScene(container: HTMLElement): OrbSceneApi {
   let currentSurge = 0;
   let isMinimized = false;
   let minimizeT = 0;
+  const prevMouse2D = new THREE.Vector2(0, 0);
+  const prevCameraPos = new THREE.Vector3().copy(HOME_POSITION);
+  let targetHologramMode = 0; // 0 = Jarvis, 1 = Ultron
+  let currentHologramMode = 0;
 
   function animate() {
     if (disposed) return;
     rafId = requestAnimationFrame(animate);
     const t = clock.getElapsedTime();
+
+    // Detect hologram mode toggle and save camera state
+    if (targetHologramMode !== lastHologramMode) {
+      if (lastHologramMode === 0) {
+        jarvisView.cameraPos.copy(camera.position);
+        jarvisView.target.copy(controls.target);
+      } else {
+        ultronView.cameraPos.copy(camera.position);
+        ultronView.target.copy(controls.target);
+      }
+      lastHologramMode = targetHologramMode;
+    }
+
+    const activeView = targetHologramMode === 0 ? jarvisView : ultronView;
+    const now = performance.now();
+    const isUserManipulating = (now - lastCameraActionTime < 100) || ((controls as any).state !== -1);
+
+    if (!isUserManipulating) {
+      // Smoothly fly camera to the mode's saved view state
+      camera.position.lerp(activeView.cameraPos, 0.08);
+      controls.target.lerp(activeView.target, 0.08);
+    } else {
+      // Keep active view in sync with current camera during user interaction
+      activeView.cameraPos.copy(camera.position);
+      activeView.target.copy(controls.target);
+    }
 
     // Outer shell rotation
     outerShell.rotation.y += 0.0015;
@@ -928,25 +1096,32 @@ export function createOrbScene(container: HTMLElement): OrbSceneApi {
       nodePoints.visible = false;
     }
 
-    // Core pulse — dramatic surges but mostly transparent, solid core size clamped
-    // Conditions 2 & 3: Turn off dimming (fadeOut) and stop surges (targetSurge = 0, currentSurge = 0) when minimized
+    // Core pulse — dynamic surges but mostly transparent, solid core size clamped
     const wave1 = Math.sin(t * 1.2);
-    const wave3 = Math.pow(Math.max(0, Math.sin(t * 0.4)), 5); // rare big surge
-    const wave4 = Math.pow(Math.max(0, Math.sin(t * 0.7 + 2)), 8); // mega surge
-    const fadeOut = isMinimized ? 0 : Math.pow(Math.max(0, Math.sin(t * 0.25)), 3); // periodic full transparency
-    
-    const targetSurge = isMinimized ? 0 : (wave3 * 1.5 + wave4 * 2.0);
+    const fadeOut = 0; // Stable, always fully visible
+
+    // Calculate user interaction activity (mouse movement + camera rotation/zoom deltas)
+    const mouseSpeed = Math.hypot(mouse2D.x - prevMouse2D.x, mouse2D.y - prevMouse2D.y);
+    prevMouse2D.copy(mouse2D);
+
+    const cameraMoved = camera.position.distanceTo(prevCameraPos);
+    prevCameraPos.copy(camera.position);
+
+    // Blend and cap activity input (responsive but not too large)
+    const activityInput = Math.min(1.0, mouseSpeed * 8.0 + cameraMoved * 12.0);
+    const targetSurge = isMinimized ? 0 : activityInput * 1.6;
+
     if (isMinimized) {
       currentSurge = 0; // Force explosion to stop instantly when minimized
     }
     if (targetSurge > currentSurge) {
-      // Rapid burst attack (smooth but explosive)
-      currentSurge += (targetSurge - currentSurge) * 0.18;
+      // Snappy response (smooth and faster)
+      currentSurge += (targetSurge - currentSurge) * 0.28;
     } else {
-      // Damped decay release (feels like physical cooling off)
-      currentSurge += (targetSurge - currentSurge) * 0.045;
+      // Faster decay (stops quickly so it's not too long)
+      currentSurge += (targetSurge - currentSurge) * 0.12;
     }
-    const surge = isMinimized ? 0 : currentSurge;
+    const surge = 0; // Disable explosions entirely to keep the inner wireframe cage clean and visible
 
     // Clamp solid core sphere expansion (avoiding giant solid light block)
     // Scale down the solid core sphere when minimized to a tiny pinpoint nucleus (scaled down by 82%)
@@ -954,7 +1129,7 @@ export function createOrbScene(container: HTMLElement): OrbSceneApi {
     const targetCoreSphereScale = (1.0 - minimizeT * 0.82) * coreSphereScale;
     coreSphere.scale.setScalar(targetCoreSphereScale);
 
-    // Keep it bright and glowing (reduce opacity slightly when minimized to prevent blinding bloom)
+    // Keep it bright and glowing (stable, no periodic fadeOut)
     const coreOpacity = Math.max(
       0.4,
       (0.5 + wave1 * 0.05 + surge * 0.15) * (1 - fadeOut * 0.95),
@@ -965,7 +1140,8 @@ export function createOrbScene(container: HTMLElement): OrbSceneApi {
     // Clear out the fuzzy halo by 90% when minimized to keep the inner space dark and sharp
     glowSphere.scale.setScalar(1 + surge * 0.9);
     glowSphereMat.opacity = Math.max(0, 0.18 * (1.0 - surge / 3.5)) * (1.0 - minimizeT * 0.90);
-
+    // Fade out outer green/gold particles in minimized mode so they don't cover the classy inner cage
+    outerParticleMat.opacity = 0.85 * (1.0 - minimizeT * 0.90);
     // Icosahedron wireframe shell (scaled down by only 4% so it stays large and clearly visible as a cage around the tiny core)
     icoWire.scale.setScalar((1.0 - minimizeT * 0.04) * (1 + surge * 0.75));
     icoWireMat.opacity = Math.min(0.95, 0.5 + surge * 0.45);
@@ -975,6 +1151,83 @@ export function createOrbScene(container: HTMLElement): OrbSceneApi {
     panelGroup.scale.setScalar(1.0 + surge * 0.12);
     shell2.scale.setScalar(1.0 + surge * 0.15);
     innerCore.scale.setScalar(1.0 + surge * 0.35);
+
+    // Morph colors and neural network opacity
+    const lerpSpeed = 0.05;
+    currentHologramMode += (targetHologramMode - currentHologramMode) * lerpSpeed;
+
+    C_BRIGHT.lerpColors(J_BRIGHT, U_BRIGHT, currentHologramMode);
+    C_MID.lerpColors(J_MID, U_MID, currentHologramMode);
+    C_DIM.lerpColors(J_DIM, U_DIM, currentHologramMode);
+    C_FAINT.lerpColors(J_FAINT, U_FAINT, currentHologramMode);
+    C_HOT.lerpColors(J_HOT, U_HOT, currentHologramMode);
+
+    // Apply color morphing to all scene meshes & lines
+    scene.traverse((child) => {
+      if (child instanceof THREE.Mesh || child instanceof THREE.Line || child instanceof THREE.LineSegments || child instanceof THREE.Points) {
+        const mat = child.material as THREE.Material & { color?: THREE.Color };
+        if (mat && mat.color) {
+          const c = mat.color;
+          if (child === coreSphere || child === icoWire) {
+            c.copy(C_HOT);
+          } else if (child === glowSphere) {
+            c.copy(C_MID);
+          } else if (child === dustPoints || child === spikeLines || child === nodePoints) {
+            c.copy(C_BRIGHT);
+          } else if (child === neuralWeb) {
+            c.copy(U_BRIGHT); // Keep neural web neon cyan
+          } else {
+            if (mat.userData.origHex === undefined) {
+              mat.userData.origHex = c.getHex();
+            }
+            const hex = mat.userData.origHex;
+            if (hex === 0xffaa00) c.copy(C_BRIGHT);
+            else if (hex === 0xff7700) c.copy(C_MID);
+            else if (hex === 0xcc4400) c.copy(C_DIM);
+            else if (hex === 0x551100) c.copy(C_FAINT);
+            else if (hex === 0xffeed0) c.copy(C_HOT);
+          }
+        }
+      }
+    });
+
+    // Morph the outer particle vertex colors
+    const colorsArr = outerParticleGeo.attributes.color.array as Float32Array;
+    for (let i = 0; i < outerParticleCount; i++) {
+      const idx = i * 3;
+      const jIsGold = (i % 7 === 0);
+      const jR = jIsGold ? 1.0 : 0.0;
+      const jG = jIsGold ? 0.66 : 1.0;
+      const jB = jIsGold ? 0.0 : 0.4;
+
+      const uIsDeep = (i % 7 === 0);
+      const uR = uIsDeep ? 0.0 : 0.0;
+      const uG = uIsDeep ? 0.2 : 0.82;
+      const uB = uIsDeep ? 0.8 : 1.0;
+
+      colorsArr[idx] = THREE.MathUtils.lerp(jR, uR, currentHologramMode);
+      colorsArr[idx + 1] = THREE.MathUtils.lerp(jG, uG, currentHologramMode);
+      colorsArr[idx + 2] = THREE.MathUtils.lerp(jB, uB, currentHologramMode);
+    }
+    outerParticleGeo.attributes.color.needsUpdate = true;
+
+    // Fade in neural synapses and organically pulse/distort them in Ultron mode
+    neuralMat.opacity = currentHologramMode * 0.55;
+    if (currentHologramMode > 0.01) {
+      const neuralPosAttr = neuralGeo.attributes.position;
+      const neuralPosArr = neuralPosAttr.array as Float32Array;
+      for (let i = 0; i < neuralPosArr.length / 3; i++) {
+        const idx = i * 3;
+        const ox = neuralOrig[idx];
+        const oy = neuralOrig[idx + 1];
+        const oz = neuralOrig[idx + 2];
+        const offset = Math.sin(t * 4 + ox * 3 + oy * 2) * 0.045 * currentHologramMode;
+        neuralPosArr[idx] = ox + offset;
+        neuralPosArr[idx + 1] = oy + offset;
+        neuralPosArr[idx + 2] = oz + offset;
+      }
+      neuralGeo.attributes.position.needsUpdate = true;
+    }
 
     // Dynamic opacity/intensity boost for outer lines during surges (never fade them out)
     const traverseOpacityBoost = (obj: THREE.Object3D) => {
@@ -987,10 +1240,12 @@ export function createOrbScene(container: HTMLElement): OrbSceneApi {
             }
             if (child.userData.isThickBand) {
               // Fade out thick cross/equator bands when minimized to keep the center clean
-              mat.opacity = mat.userData.origOpacity * (1.0 - minimizeT * 0.96);
+              mat.opacity = mat.userData.origOpacity * (1.0 - minimizeT * 0.96) * (1.0 - currentHologramMode * 0.85);
             } else {
-              // Boost opacity during surge, up to 1.85x, capped at 1.0
-              mat.opacity = Math.min(1.0, mat.userData.origOpacity * (1.0 + surge * 0.85));
+              // Boost opacity during surge, and fade out structured outer lines in Ultron mode
+              const isOuter = (obj === outerShell || obj === panelGroup || obj === shell2);
+              const holoFade = isOuter ? (1.0 - currentHologramMode * 0.82) : 1.0;
+              mat.opacity = Math.min(1.0, mat.userData.origOpacity * (1.0 + surge * 0.85)) * holoFade;
             }
           }
         }
@@ -1199,18 +1454,23 @@ export function createOrbScene(container: HTMLElement): OrbSceneApi {
   function onResize() {
     const w = container.clientWidth;
     const h = container.clientHeight;
+    if (w === 0 || h === 0) return;
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
     renderer.setSize(w, h);
     composer.setSize(w, h);
   }
-  window.addEventListener("resize", onResize);
+
+  const resizeObserver = new ResizeObserver(() => {
+    onResize();
+  });
+  resizeObserver.observe(container);
 
   // ——— CLEANUP ———
   function dispose() {
     disposed = true;
     cancelAnimationFrame(rafId);
-    window.removeEventListener("resize", onResize);
+    resizeObserver.disconnect();
     controls.dispose();
     void setMicActive(false);
 
@@ -1249,6 +1509,9 @@ export function createOrbScene(container: HTMLElement): OrbSceneApi {
     setMinimized: (min: boolean) => { 
       isMinimized = min; 
       resetView();
+    },
+    setHologramMode: (mode: "jarvis" | "ultron") => {
+      targetHologramMode = (mode === "ultron" ? 1 : 0);
     },
   };
 }

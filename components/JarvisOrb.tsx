@@ -28,9 +28,10 @@ export default function JarvisOrb() {
   const [coords, setCoords] = useState({ x: "0.00", y: "0.00" });
   const [mic, setMic] = useState(false);
   const [minimized, setMinimized] = useState(false);
+  const [hologramMode, setHologramMode] = useState<"jarvis" | "ultron">("jarvis");
   const [logs, setLogs] = useState<string[]>([
     "SYS: ULTRON CORE INITIALIZED",
-    "SYS: LOADED THREE.JS GRAPHICS NODE",
+    "SYS: POSITION HANDS WITH WRISTS VISIBLE FOR BEST TRACKING",
     "SYS: SHADER CHROMATIC PASS: ARMED",
     "SYS: STANDBY ACTIVE",
   ]);
@@ -39,6 +40,15 @@ export default function JarvisOrb() {
     const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
     setLogs((prev) => [...prev.slice(-15), `[${timestamp}] ${msg}`]);
   }, []);
+
+  const toggleHologramMode = useCallback(() => {
+    setHologramMode((prev) => {
+      const next = prev === "jarvis" ? "ultron" : "jarvis";
+      sceneRef.current?.setHologramMode(next);
+      addLog(`SYSTEM RECONFIGURATION: ${next.toUpperCase()} INTERFACE INTEGRATED`);
+      return next;
+    });
+  }, [addLog]);
 
   useEffect(() => {
     const mockMsgs = [
@@ -110,6 +120,7 @@ export default function JarvisOrb() {
         setCoords({ x: x.toFixed(2), y: y.toFixed(2) });
       },
       onClap: toggleMinimize, // Clap gesture toggles minimize mode!
+      onTonyGesture: toggleHologramMode, // Tony Stark palm gesture swaps hologram mode!
     });
     trackerRef.current = tracker;
 
@@ -128,7 +139,7 @@ export default function JarvisOrb() {
       );
       addLog("GESTURE ACTIVATION FAILED");
     }
-  }, [addLog, toggleMinimize]);
+  }, [addLog, toggleMinimize, toggleHologramMode]);
 
   const toggleGestures = useCallback(() => {
     if (trackerRef.current) stopGestures();
@@ -183,16 +194,20 @@ export default function JarvisOrb() {
         case "M":
           toggleMinimize();
           break;
+        case "h":
+        case "H":
+          toggleHologramMode();
+          break;
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [toggleGestures, toggleMinimize]);
+  }, [toggleGestures, toggleMinimize, toggleHologramMode]);
 
   const cameraOn = camera === "on";
 
   return (
-    <>
+    <div className={hologramMode === "ultron" ? "ultron-theme" : ""}>
       <div
         ref={containerRef}
         className="orb-root"
@@ -221,8 +236,10 @@ export default function JarvisOrb() {
         error={error}
         minimized={minimized}
         toggleMinimize={toggleMinimize}
+        hologramMode={hologramMode}
+        toggleHologramMode={toggleHologramMode}
       />
-    </>
+    </div>
   );
 }
 
@@ -242,6 +259,8 @@ interface AdvancedHUDProps {
   error: string | null;
   minimized: boolean;
   toggleMinimize: () => void;
+  hologramMode: "jarvis" | "ultron";
+  toggleHologramMode: () => void;
 }
 
 function AdvancedHUD({
@@ -260,6 +279,8 @@ function AdvancedHUD({
   error,
   minimized,
   toggleMinimize,
+  hologramMode,
+  toggleHologramMode,
 }: AdvancedHUDProps) {
   return (
     <>
@@ -474,9 +495,9 @@ function AdvancedHUD({
               ) : (
                 <>
                   <video ref={videoRef} muted playsInline className="camera-video" />
-                  <canvas ref={overlayRef} width={208} height={156} className="camera-overlay" />
+                  <canvas ref={overlayRef} className="camera-overlay" />
                   <div className="camera-status">
-                    {hands > 0 ? `${hands} HAND${hands > 1 ? "S" : ""} · ${mode}` : "SHOW HANDS"}
+                    {hands > 0 ? `${hands} HAND${hands > 1 ? "S" : ""} · ${mode}` : "SHOW HANDS (KEEP WRISTS VISIBLE)"}
                   </div>
                 </>
               )}
@@ -542,38 +563,100 @@ function AdvancedHUD({
         </div>
 
       {/* CONSOLE CONTROL DOCK */}
-      <div className="hud-console-dock">
+      <div className={`hud-console-dock mode-${hologramMode}`}>
         <div className="dock-section dock-left">
           <span className="dock-label">TRACKING</span>
           <span className="dock-val">{cameraOn ? `${hands} HANDS · ${mode}` : "STANDBY"}</span>
         </div>
 
         <div className="dock-center">
+          {/* GESTURES CONTROL */}
           <button
-            className={`dock-btn ${cameraOn ? 'active' : ''}`}
+            className={`dock-btn-advanced ${cameraOn ? 'active' : ''}`}
             onClick={toggleGestures}
             disabled={camera === 'starting'}
-            title="Toggle Hand Gestures (Webcam)"
+            title="Toggle Hand Gestures (Webcam) [Key: G]"
           >
-            {camera === 'starting' ? 'INITIALIZING…' : cameraOn ? '📷 GESTURES ON' : '📷 GESTURES OFF'}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="hud-svg-icon">
+              <path d="M18 10h-1.25c-.41 0-.75-.34-.75-.75V8.5c0-.83-.67-1.5-1.5-1.5h-5c-.83 0-1.5.67-1.5 1.5v.75c0 .41-.34.75-.75.75H6a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2z" />
+              <circle cx="12" cy="14" r="3" />
+              <path d="M12 2v3M5 5l2 2M19 5l-2 2" />
+            </svg>
+            <div className="btn-label-group">
+              <span className="btn-title">TRACKING</span>
+              <span className="btn-status">{camera === 'starting' ? 'BOOTING' : cameraOn ? 'ONLINE' : 'STANDBY'}</span>
+            </div>
           </button>
+
+          {/* VOICE CONTROL */}
           <button
-            className={`dock-btn ${mic ? 'active' : ''}`}
+            className={`dock-btn-advanced ${mic ? 'active' : ''}`}
             onClick={toggleMic}
-            title="Toggle Mic (Voice Visualizer)"
+            title="Toggle Mic (Voice Visualizer) [Key: V]"
           >
-            {mic ? '🎙️ VOICE ON' : '🎙️ VOICE OFF'}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="hud-svg-icon">
+              <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
+              <path d="M19 10v1a7 7 0 0 1-14 0v-1M12 19v3M8 22h8" />
+            </svg>
+            <div className="btn-label-group">
+              <span className="btn-title">VOICE FILTER</span>
+              <span className="btn-status">{mic ? 'ACTIVE' : 'OFFLINE'}</span>
+            </div>
           </button>
+
+          {/* ATOM SCALE CONTROL */}
           <button
-            className={`dock-btn ${minimized ? 'active' : ''}`}
+            className={`dock-btn-advanced ${minimized ? 'active' : ''}`}
             onClick={toggleMinimize}
             title="Toggle Minimize (Tony Stark Atom Mode) [Key: M]"
           >
-            {minimized ? "🔎 EXPAND" : "📦 MINIMIZE"}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="hud-svg-icon">
+              <path d="M4 14h6v6M20 10h-6V4M14 10l7-7M10 14l-7 7" />
+            </svg>
+            <div className="btn-label-group">
+              <span className="btn-title">STARK ATOM</span>
+              <span className="btn-status">{minimized ? 'MINIMIZED' : 'EXPANDED'}</span>
+            </div>
           </button>
-          <button className="dock-btn" onClick={() => sceneRef.current?.zoomIn()} title="Zoom In">+</button>
-          <button className="dock-btn" onClick={() => sceneRef.current?.zoomOut()} title="Zoom Out">−</button>
-          <button className="dock-btn" onClick={() => sceneRef.current?.resetView()} title="Reset View">RESET</button>
+
+          {/* SYSTEM MODE TOGGLE (Avatar Image instead of emoji) */}
+          <button
+            className={`dock-btn-advanced toggle-hologram-btn active`}
+            onClick={toggleHologramMode}
+            title="Toggle Hologram (Jarvis vs. Ultron) [Key: H]"
+          >
+            <img 
+              src={hologramMode === "jarvis" ? "/jarvis.jpg" : "/ultron.jpg"} 
+              className="hologram-avatar" 
+              alt="System Avatar"
+            />
+            <div className="btn-label-group">
+              <span className="btn-title">CORE MATRIX</span>
+              <span className="btn-status" style={{ textTransform: 'uppercase' }}>{hologramMode}</span>
+            </div>
+          </button>
+
+          {/* UTILITY BUTTONS */}
+          <button className="dock-btn-advanced" onClick={() => sceneRef.current?.zoomIn()} title="Zoom In">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="hud-svg-icon">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+          </button>
+          <button className="dock-btn-advanced" onClick={() => sceneRef.current?.zoomOut()} title="Zoom Out">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="hud-svg-icon">
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+          </button>
+          <button className="dock-btn-advanced" onClick={() => sceneRef.current?.resetView()} title="Reset View">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="hud-svg-icon">
+              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
+            </svg>
+            <div className="btn-label-group">
+              <span className="btn-title">VIEWSTATE</span>
+              <span className="btn-status">RESET</span>
+            </div>
+          </button>
         </div>
 
         <div className="dock-section dock-right">
