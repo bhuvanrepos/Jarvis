@@ -30,7 +30,7 @@ export default function JarvisOrb() {
   const [minimized, setMinimized] = useState(false);
   const [hologramMode, setHologramMode] = useState<"jarvis" | "ultron">("jarvis");
   const [logs, setLogs] = useState<string[]>([
-    "SYS: ULTRON CORE INITIALIZED",
+    "SYS: JARVIS CORE INITIALIZED",
     "SYS: POSITION HANDS WITH WRISTS VISIBLE FOR BEST TRACKING",
     "SYS: SHADER CHROMATIC PASS: ARMED",
     "SYS: STANDBY ACTIVE",
@@ -207,7 +207,7 @@ export default function JarvisOrb() {
   const cameraOn = camera === "on";
 
   return (
-    <div className={hologramMode === "ultron" ? "ultron-theme" : ""}>
+    <div className={hologramMode === "ultron" ? "ultron-theme" : "jarvis-theme"}>
       <div
         ref={containerRef}
         className="orb-root"
@@ -284,7 +284,9 @@ function AdvancedHUD({
 }: AdvancedHUDProps) {
   return (
     <>
-      <div className="hud hud-title">U.L.T.R.O.N.</div>
+      <div className="hud hud-title">
+        {hologramMode === "jarvis" ? "J.A.R.V.I.S." : "U.L.T.R.O.N."}
+      </div>
 
       {/* LEFT CONTAINER (Left Column + Left Floating Column) */}
       <div className="hud-left-container">
@@ -619,20 +621,22 @@ function AdvancedHUD({
             </div>
           </button>
 
-          {/* SYSTEM MODE TOGGLE (Avatar Image instead of emoji) */}
+          {/* SYSTEM MODE TOGGLE (Avatar Image & Opposite Target System) */}
           <button
-            className={`dock-btn-advanced toggle-hologram-btn active`}
+            className={`dock-btn-advanced toggle-hologram-btn active ${hologramMode === "jarvis" ? "target-ultron" : "target-jarvis"}`}
             onClick={toggleHologramMode}
             title="Toggle Hologram (Jarvis vs. Ultron) [Key: H]"
           >
             <img 
-              src={hologramMode === "jarvis" ? "/jarvis.jpg" : "/ultron.jpg"} 
+              src={hologramMode === "jarvis" ? "/ultron.jpg" : "/jarvis.jpg"} 
               className="hologram-avatar" 
               alt="System Avatar"
             />
             <div className="btn-label-group">
               <span className="btn-title">CORE MATRIX</span>
-              <span className="btn-status" style={{ textTransform: 'uppercase' }}>{hologramMode}</span>
+              <span className="btn-status" style={{ textTransform: 'uppercase' }}>
+                {hologramMode === "jarvis" ? "ULTRON" : "JARVIS"}
+              </span>
             </div>
           </button>
 

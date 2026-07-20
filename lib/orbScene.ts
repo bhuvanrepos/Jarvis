@@ -169,17 +169,19 @@ export function createOrbScene(container: HTMLElement): OrbSceneApi {
   });
 
   // ——— COLORS (Jarvis vs. Ultron Mode) ———
-  const J_BRIGHT = new THREE.Color(0xffaa00);
-  const J_MID = new THREE.Color(0xff7700);
-  const J_DIM = new THREE.Color(0xcc4400);
-  const J_FAINT = new THREE.Color(0x551100);
-  const J_HOT = new THREE.Color(0xffeed0);
+  // Ultron Mode (0) = Warm Gold & Amber (Image 1)
+  const U_BRIGHT = new THREE.Color(0xffaa00); // Amber Gold
+  const U_MID = new THREE.Color(0xff7700);    // Warm Orange
+  const U_DIM = new THREE.Color(0xcc4400);    // Deep Amber
+  const U_FAINT = new THREE.Color(0x551100);  // Faint Crimson
+  const U_HOT = new THREE.Color(0xffeed0);    // Warm White/Gold Core
 
-  const U_BRIGHT = new THREE.Color(0x00d2ff); // Neon Cyan
-  const U_MID = new THREE.Color(0x0066ff);    // Neon Blue
-  const U_DIM = new THREE.Color(0x0033aa);    // Deep Cobalt
-  const U_FAINT = new THREE.Color(0x001144);  // Faint Navy
-  const U_HOT = new THREE.Color(0xe0f7ff);    // Electric White/Cyan Core
+  // Jarvis Mode (1) = Neon Cyan & Electric Blue (Image 2)
+  const J_BRIGHT = new THREE.Color(0x00d2ff); // Neon Cyan
+  const J_MID = new THREE.Color(0x0066ff);    // Neon Blue
+  const J_DIM = new THREE.Color(0x0033aa);    // Deep Cobalt
+  const J_FAINT = new THREE.Color(0x001144);  // Faint Navy
+  const J_HOT = new THREE.Color(0xe0f7ff);    // Electric White/Cyan Core
 
   const C_BRIGHT = J_BRIGHT.clone();
   const C_MID = J_MID.clone();
@@ -901,7 +903,7 @@ export function createOrbScene(container: HTMLElement): OrbSceneApi {
     cameraPos: new THREE.Vector3().copy(HOME_POSITION),
     target: new THREE.Vector3(0, 0, 0),
   };
-  let lastHologramMode = 0;
+  let lastHologramMode = 1; // 1 = Jarvis (Image 2), 0 = Ultron (Image 1)
 
   function rotateBy(deltaTheta: number, deltaPhi: number) {
     lastCameraActionTime = performance.now();
@@ -933,7 +935,7 @@ export function createOrbScene(container: HTMLElement): OrbSceneApi {
   }
 
   function resetView() {
-    const activeView = targetHologramMode === 0 ? jarvisView : ultronView;
+    const activeView = targetHologramMode === 1 ? jarvisView : ultronView;
     activeView.cameraPos.copy(HOME_POSITION);
     activeView.target.set(0, 0, 0);
 
@@ -955,8 +957,8 @@ export function createOrbScene(container: HTMLElement): OrbSceneApi {
   let minimizeT = 0;
   const prevMouse2D = new THREE.Vector2(0, 0);
   const prevCameraPos = new THREE.Vector3().copy(HOME_POSITION);
-  let targetHologramMode = 0; // 0 = Jarvis, 1 = Ultron
-  let currentHologramMode = 0;
+  let targetHologramMode = 1; // 1 = Jarvis (Image 2), 0 = Ultron (Image 1)
+  let currentHologramMode = 1;
 
   function animate() {
     if (disposed) return;
@@ -965,7 +967,7 @@ export function createOrbScene(container: HTMLElement): OrbSceneApi {
 
     // Detect hologram mode toggle and save camera state
     if (targetHologramMode !== lastHologramMode) {
-      if (lastHologramMode === 0) {
+      if (lastHologramMode === 1) {
         jarvisView.cameraPos.copy(camera.position);
         jarvisView.target.copy(controls.target);
       } else {
@@ -975,7 +977,7 @@ export function createOrbScene(container: HTMLElement): OrbSceneApi {
       lastHologramMode = targetHologramMode;
     }
 
-    const activeView = targetHologramMode === 0 ? jarvisView : ultronView;
+    const activeView = targetHologramMode === 1 ? jarvisView : ultronView;
     const now = performance.now();
     const isUserManipulating = (now - lastCameraActionTime < 100) || ((controls as any).state !== -1);
 
@@ -1156,11 +1158,11 @@ export function createOrbScene(container: HTMLElement): OrbSceneApi {
     const lerpSpeed = 0.05;
     currentHologramMode += (targetHologramMode - currentHologramMode) * lerpSpeed;
 
-    C_BRIGHT.lerpColors(J_BRIGHT, U_BRIGHT, currentHologramMode);
-    C_MID.lerpColors(J_MID, U_MID, currentHologramMode);
-    C_DIM.lerpColors(J_DIM, U_DIM, currentHologramMode);
-    C_FAINT.lerpColors(J_FAINT, U_FAINT, currentHologramMode);
-    C_HOT.lerpColors(J_HOT, U_HOT, currentHologramMode);
+    C_BRIGHT.lerpColors(U_BRIGHT, J_BRIGHT, currentHologramMode);
+    C_MID.lerpColors(U_MID, J_MID, currentHologramMode);
+    C_DIM.lerpColors(U_DIM, J_DIM, currentHologramMode);
+    C_FAINT.lerpColors(U_FAINT, J_FAINT, currentHologramMode);
+    C_HOT.lerpColors(U_HOT, J_HOT, currentHologramMode);
 
     // Apply color morphing to all scene meshes & lines
     scene.traverse((child) => {
@@ -1175,45 +1177,47 @@ export function createOrbScene(container: HTMLElement): OrbSceneApi {
           } else if (child === dustPoints || child === spikeLines || child === nodePoints) {
             c.copy(C_BRIGHT);
           } else if (child === neuralWeb) {
-            c.copy(U_BRIGHT); // Keep neural web neon cyan
+            c.copy(J_BRIGHT); // Keep neural web neon cyan (JARVIS Mode)
           } else {
             if (mat.userData.origHex === undefined) {
               mat.userData.origHex = c.getHex();
             }
             const hex = mat.userData.origHex;
-            if (hex === 0xffaa00) c.copy(C_BRIGHT);
-            else if (hex === 0xff7700) c.copy(C_MID);
-            else if (hex === 0xcc4400) c.copy(C_DIM);
-            else if (hex === 0x551100) c.copy(C_FAINT);
-            else if (hex === 0xffeed0) c.copy(C_HOT);
+            if (hex === 0x00d2ff || hex === 0xffaa00) c.copy(C_BRIGHT);
+            else if (hex === 0x0066ff || hex === 0xff7700) c.copy(C_MID);
+            else if (hex === 0x0033aa || hex === 0xcc4400) c.copy(C_DIM);
+            else if (hex === 0x001144 || hex === 0x551100) c.copy(C_FAINT);
+            else if (hex === 0xe0f7ff || hex === 0xffeed0) c.copy(C_HOT);
           }
         }
       }
     });
 
-    // Morph the outer particle vertex colors
+    // Morph the outer particle vertex colors (0 = ULTRON Gold/Green, 1 = JARVIS Cyan/Blue)
     const colorsArr = outerParticleGeo.attributes.color.array as Float32Array;
     for (let i = 0; i < outerParticleCount; i++) {
       const idx = i * 3;
-      const jIsGold = (i % 7 === 0);
-      const jR = jIsGold ? 1.0 : 0.0;
-      const jG = jIsGold ? 0.66 : 1.0;
-      const jB = jIsGold ? 0.0 : 0.4;
+      // Ultron (Gold / Green data dots - Image 1)
+      const uIsGold = (i % 7 === 0);
+      const uR = uIsGold ? 1.0 : 0.0;
+      const uG = uIsGold ? 0.78 : 1.0;
+      const uB = uIsGold ? 0.0 : 0.4;
 
-      const uIsDeep = (i % 7 === 0);
-      const uR = uIsDeep ? 0.0 : 0.0;
-      const uG = uIsDeep ? 0.2 : 0.82;
-      const uB = uIsDeep ? 0.8 : 1.0;
+      // Jarvis (Cyan / Deep Blue-Green)
+      const jIsDeep = (i % 7 === 0);
+      const jR = jIsDeep ? 0.0 : 0.0;
+      const jG = jIsDeep ? 0.2 : 0.82;
+      const jB = jIsDeep ? 0.8 : 1.0;
 
-      colorsArr[idx] = THREE.MathUtils.lerp(jR, uR, currentHologramMode);
-      colorsArr[idx + 1] = THREE.MathUtils.lerp(jG, uG, currentHologramMode);
-      colorsArr[idx + 2] = THREE.MathUtils.lerp(jB, uB, currentHologramMode);
+      colorsArr[idx] = THREE.MathUtils.lerp(uR, jR, currentHologramMode);
+      colorsArr[idx + 1] = THREE.MathUtils.lerp(uG, jG, currentHologramMode);
+      colorsArr[idx + 2] = THREE.MathUtils.lerp(uB, jB, currentHologramMode);
     }
     outerParticleGeo.attributes.color.needsUpdate = true;
 
-    // Fade in neural synapses and organically pulse/distort them in Ultron mode
-    neuralMat.opacity = currentHologramMode * 0.55;
-    if (currentHologramMode > 0.01) {
+    // Fade in neural synapses in JARVIS Mode (Image 2) and pulse them
+    neuralMat.opacity = (1.0 - currentHologramMode) * 0.55;
+    if (currentHologramMode < 0.99) {
       const neuralPosAttr = neuralGeo.attributes.position;
       const neuralPosArr = neuralPosAttr.array as Float32Array;
       for (let i = 0; i < neuralPosArr.length / 3; i++) {
@@ -1221,7 +1225,7 @@ export function createOrbScene(container: HTMLElement): OrbSceneApi {
         const ox = neuralOrig[idx];
         const oy = neuralOrig[idx + 1];
         const oz = neuralOrig[idx + 2];
-        const offset = Math.sin(t * 4 + ox * 3 + oy * 2) * 0.045 * currentHologramMode;
+        const offset = Math.sin(t * 4 + ox * 3 + oy * 2) * 0.045 * (1.0 - currentHologramMode);
         neuralPosArr[idx] = ox + offset;
         neuralPosArr[idx + 1] = oy + offset;
         neuralPosArr[idx + 2] = oz + offset;
@@ -1511,7 +1515,7 @@ export function createOrbScene(container: HTMLElement): OrbSceneApi {
       resetView();
     },
     setHologramMode: (mode: "jarvis" | "ultron") => {
-      targetHologramMode = (mode === "ultron" ? 1 : 0);
+      targetHologramMode = (mode === "jarvis" ? 1 : 0);
     },
   };
 }

@@ -19,8 +19,8 @@ const RING_FINGER_TIP = 16;
 const PINKY_TIP = 20;
 
 // Pinch hysteresis: thumb–index distance relative to hand size
-const PINCH_ON = 0.38;
-const PINCH_OFF = 0.52;
+const PINCH_ON = 0.22;
+const PINCH_OFF = 0.30;
 
 // How strongly hand movement rotates the orb (radians per normalized unit)
 const ROTATE_SPEED = 5.0;
@@ -271,21 +271,20 @@ export class HandTracker {
           const len = Math.hypot(nx, ny, nz);
           
           let isFacingStraight = false;
-          let isPalmForward = false;
-          
           if (len > 1e-6) {
             const normalZ = Math.abs(nz / len);
-            isFacingStraight = normalZ > 0.88; // Relaxed slightly from 0.91 to allow comfortable straight hands
-            
-            // Verify if palm is facing the camera (nz > 0 for Right hand, nz < 0 for Left hand)
-            if (label === "Right") {
-              isPalmForward = nz > 0.003;
-            } else if (label === "Left") {
-              isPalmForward = nz < -0.003;
-            }
+            isFacingStraight = normalZ > 0.70; // Comfortable palm facing camera check (allows slight hand tilt)
           }
 
-          if (dThumb > 0.88 && dIndex > 1.25 && dMiddle > 1.25 && dRing > 1.15 && dPinky > 1.15 && isFacingStraight && isPalmForward) {
+          const allFingersExtended = (
+            dThumb > 0.72 &&
+            dIndex > 1.05 &&
+            dMiddle > 1.05 &&
+            dRing > 0.95 &&
+            dPinky > 0.95
+          );
+
+          if (allFingersExtended && isFacingStraight) {
             tonyDetected = true;
           }
         }
@@ -293,7 +292,7 @@ export class HandTracker {
     }
 
     if (peaceDetected) {
-      if (!this.poseState && (now - this.lastPoseTime > 1500)) {
+      if (!this.poseState && (now - this.lastPoseTime > 1000)) {
         this.poseState = true;
         this.lastPoseTime = now;
         this.callbacks.onClap?.(); // Triggers the React minimize/expand toggle handler
@@ -303,7 +302,7 @@ export class HandTracker {
     }
 
     if (tonyDetected) {
-      if (!this.tonyState && (now - this.lastTonyTime > 1500)) {
+      if (!this.tonyState && (now - this.lastTonyTime > 1000)) {
         this.tonyState = true;
         this.lastTonyTime = now;
         this.callbacks.onTonyGesture?.(); // Triggers the React Jarvis vs. Ultron toggle handler
